@@ -83,14 +83,13 @@ def clean_text(dataframe, text_column):
   df = dataframe.copy()
   all_texts = []
   for text in df[text_column]:
-    text = re.sub(r"(http|https):\/\/([\w\s\d\.]+)(\/?)(.*)", "", str(text))
-    #text = re.sub(r"http\S+", "", text)  #  urls
+    text = re.sub(r"(http|https):\/\/([\w\s\d\.]+)(\/?)(.*)", "", str(text)) # urls
     text = re.sub('@[\w]+',' ', text)  # mentions
     text = text.replace("\n", " ") # new lines
     text = re.sub(r'\B#\w*[a-zA-Z]+\w*',' ', text) # hashtags
     text = text.translate(str.maketrans(' ', ' ', string.punctuation)) # punctuation marks
     text = text.strip()
-    text = re.sub(r'\s\s\s+', ' ', text)
+    text = re.sub(r'\s\s\s+', ' ', text) # empty spaces
     all_texts.append(text)
   df["clean_" + text_column] = all_texts
   return df

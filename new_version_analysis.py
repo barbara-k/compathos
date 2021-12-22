@@ -125,7 +125,6 @@ def lemmatization(dataframe, text_column):
   df = dataframe.copy()
   lemmas = []
   for doc in nlp.pipe(df[text_column].apply(str)):
-#    lemmas.append([token.lemma_ for token in doc]) #basic tokenization an dlemmatization without removing anything
     lemmas.append([token.lemma_ for token in doc if not (token.is_punct or token.like_num) and (len(token) > 2)])
   df[text_column +"_lemmatized"] = lemmas
   df[df[text_column +"_lemmatized"].map(len) > 0]
@@ -152,6 +151,7 @@ def find_emotive_words(dataframe, content_lemmatized_column, affective_database_
     affective_database = pd.read_csv(affective_database_path)
 
   affective_database = affective_database[[db_words]]
+  affective_database_emotive_words = affective_database[db_words].tolist()
 
   all_emotive_words = []
   if uniq_words == True:
@@ -161,14 +161,13 @@ def find_emotive_words(dataframe, content_lemmatized_column, affective_database_
 
   elif uniq_words == False:
     for lemmas_list in dataframe[content_lemmatized_column]:
-      from collections import Counter
-      list_words = list(affective_database[db_words])
-      list_text = pd.Series(lemmas_list)
-      words_in_database = Counter(list_words)
-      lemma_words = Counter(list_text)
-      emotive_words = [key for key in list(lemma_words.keys()) if key in list(words_in_database.keys()) for i in range(lemma_words[key])]
-      all_emotive_words.append(emotive_words)
+      emotive_words = []
+      for word in lemmas_list:
+        if word in affective_database_emotive_words:
+          emotive_words.append(word)
 
+      all_emotive_words.append(emotive_words)
+  
   dataframe["Emotive_words"] = all_emotive_words
   return dataframe
 
@@ -322,9 +321,9 @@ def resample_and_compute_baseline(input_dataframe, date_col, time_from, time_to,
 
 
   ** function returns:
-  firstly - dataframe with average values for each emotion computed for each minute of specified time range,
-  secondly - baseline values in a form of dataframe with one row with emotions baselines
-  (mean values for each emotion for the whole analyzed dataset)
+  firstly - dataframe with average values for each emotion computed per time unit of specified time range,
+  secondly - baseline values in a form of dataframe with one row with emotions baselines (mean values for each emotion for the whole analyzed dataset)
+  
   '''
   df = input_dataframe.copy()
 
@@ -490,11 +489,11 @@ def count_categories(dataframe, emotion_categories_column, affective_database_pa
 
 def plot_emotion_changes(dataframe, time_column = "Date", plot_title = "Emotions changes", ticks_unit = 7, axis_grid = "x"):
   '''
-  Plot all 4 categories in 1 figure - anger, happiness, fear and valence
+  Plot all emotions in 1 figure
   '''
   sns.set_theme(style="whitegrid")
   plt.style.use("seaborn-talk")
-  fig, ax1 = plt.subplots(1, 1, figsize=(20, 8.5))
+  fig, ax1 = plt.subplots(1, 1, figsize=(16, 8.5))
   ax1.plot(dataframe[time_column], dataframe["diff_from_baseline_Fear"], c="#000000", label = "Fear")
   ax1.plot(dataframe[time_column], dataframe["diff_from_baseline_Valence"], c="#D81313", label = "Valence")
   ax1.plot(dataframe[time_column], dataframe["diff_from_baseline_Anger"], c="#FD7E00", label = "Anger")
@@ -513,7 +512,6 @@ def plot_emotion_changes(dataframe, time_column = "Date", plot_title = "Emotions
   #plt.tight_layout()
   # new legend position
   plt.legend(loc="upper center", bbox_to_anchor=(0.5, 1.075), ncol=7)
-  #plt.legend()
   plt.show()
 
 
@@ -547,7 +545,7 @@ def get_polarity_score(dataframe, content_lemmatized_column, affective_database_
   all_neg_percent = []
   all_pos_percent = []
 
-  # we take unique words bc of time (12 minutes for size of 50k, rlly long)
+  # we take unique words bc of time (12 minutes for size of 50k, rlly long) and it reduces the "positivity noise (dominance)" a little
   for lemmas_list in dataframe[content_lemmatized_column]:
     lemmas_set = set(lemmas_list)
     emotive_words = [word for word in lemmas_set.intersection(affective_database[db_words])]
@@ -597,6 +595,65 @@ def get_polarity_score(dataframe, content_lemmatized_column, affective_database_
   return dataframe
 
 
+def get_valence_values(dataframe, content_lemmatized_column, affective_database_path, db_words = "Word"):
+  '''Parameters: 
+  dataframe: dataframe with your data,
+
+  content_lemmatized_column: str - name of a column in dataframe where word-lemmas are listed, 
+  
+  affective_database_path: str - path to a file with affective database, 
+  
+  db_words: str - name of a column in affective database where words are listed, 
+
+  * this is the implementation of Algorithm 1 in 
+  [J. Kocoń, A. Janz, P. Miłkowski, K. M. Juszczyk, K. Klessa, M. Piasecki, M. Riegel, M. Wierzba, A. Marchewka, A. Czoska, D. Grimling, and B. Konat, 
+  Recognition of emotions, valence and arousal in large-scale multi-domain text reviews,  
+  In Proceedings of the 9th Language and Technology Conference. Human Language Technologies as a Challenge for Computer Science and Linguistics, 2019, p. 274–280]
+
+  https://sentimenti.pl/wp-content/uploads/2021/05/LTC2019_Recognition_of_emotions__polarity_and_arousal_in_large_scale_multi_domain_text_reviews.pdf
+  
+  '''
+
+  if affective_database_path.endswith(".xlsx"):
+    affective_database = pd.read_excel(affective_database_path)
+  elif affective_database_path.endswith(".csv"):
+    affective_database = pd.read_csv(affective_database_path)
+
+  emotion_values = ["Valence"]
+  used_cols = [db_words] + emotion_values
+
+  affective_database_valence = affective_database[used_cols]
+  affective_database_valence.set_index(db_words, inplace=True)
+  valence_mean = affective_database_valence["Valence"].mean()
+  affective_database_valence_words = affective_database[db_words].tolist()
+
+  neg_valence_scores = []
+  pos_valence_scores = []
+
+  for lemmas_list in dataframe[content_lemmatized_column]:
+    emotive_words = []
+    for word in lemmas_list:
+      if word in affective_database_valence_words:
+        emotive_words.append(word)
+
+    if len(emotive_words) > 0:
+      scores = affective_database_valence.loc[emotive_words]
+      neg_score = abs(np.sum(scores.where(scores["Valence"] < valence_mean))[0])
+      neg_score = (neg_score / len(emotive_words))
+      neg_valence_scores.append(neg_score)
+      pos_score = np.sum(scores.where(scores["Valence"] > valence_mean))[0]
+      pos_score = (pos_score / len(emotive_words))
+      pos_valence_scores.append(pos_score)
+    else:
+      neg_score=pos_score = np.NaN 
+      neg_valence_scores.append(neg_score)
+      pos_valence_scores.append(pos_score)
+
+  dataframe["Valence_mean_negative"] = neg_valence_scores
+  dataframe["Valence_mean_positive"] = pos_valence_scores
+  return dataframe
+
+
 
 def universal_resample_polarity(input_dataframe, date_col, polarity_col, time_from, time_to, time_unit = "1 min"):
   '''Parameters:
@@ -606,33 +663,26 @@ def universal_resample_polarity(input_dataframe, date_col, polarity_col, time_fr
 
   polarity_col: str - column name with polarity score you want to use, 
   
-  time_from: str - starting time of the range you want to analyze 
-  in format "year-month-day hour:minutes:seconds", 
+  time_from: str - starting time of the range you want to analyze in format "year-month-day hour:minutes:seconds", 
   e.g. '2019-10-08 19:30:00',
   
-  time_to: str - ending time of the range you want to analyze 
-  in format "year-month-day hour:minutes:seconds", 
+  time_to: str - ending time of the range you want to analyze in format "year-month-day hour:minutes:seconds", 
   e.g. '2019-10-08 19:30:00',
   
   time_unit: str - time unit for analysis
   *please follow instructions specified below to correctly set this parameter;  
-  if you want time_unit to be number of  seconds,
-  then specify number of seconds and use  sec  abbreviation, 
+  if you want time_unit to be number of  seconds, then specify number of seconds and use  sec  abbreviation, 
   
-  if you want time_unit to be number of  minutes,
-  then specify number of minutes and use  min  abbreviation, 
+  if you want time_unit to be number of  minutes, then specify number of minutes and use  min  abbreviation, 
   
-  if you want time_unit to be number of  hours,
-  then specify number of hours and use  h  abbreviation, 
+  if you want time_unit to be number of  hours, then specify number of hours and use  h  abbreviation, 
   
-  if you want time_unit to be number of  days,
-  then specify number of seconds and use  day  abbreviation, 
+  if you want time_unit to be number of  days, then specify number of seconds and use  day  abbreviation, 
   
    --> *by default time_unit is set to 1 minute 
 
-
   ** function returns:
-  firstly - dataframe with average values for each emotion computed for each minute of specified time range,
+  firstly - dataframe with average values for polariy computed per time unit of specified time range,
   secondly - baseline values in a form of dataframe
   '''
   df = input_dataframe.copy()
@@ -709,7 +759,7 @@ ax1.plot(df_valence_pos["Time"], df_valence_pos["diff_from_baseline_Positive_per
          label = "positive polarity %", color = "#15B3AF", alpha = 0.8)
 ax1.set_xticks(x[::5])
 ax1.set_xticklabels(x[::5], rotation=90)
-ax1.axhline(y = 0.0, color = "#5E5C5C", linestyle="--", label = "baseline", linewidth = 2)
+ax1.axhline(y = 0.0, color = "#5E5C5C", linestyle="--", label = "baseline", linewidth = 2, alpha = 0.8)
 ax1.set_xlabel("\nTime")
 ax1.set_title("Negativity and positivity in TVP 2020 May tweets\n\n", fontsize = 15)
 ax1.set_ylabel("Value")
@@ -718,43 +768,3 @@ plt.tight_layout()
 plt.legend(loc="upper center", bbox_to_anchor=(0.5, 1.1), ncol=3)
 plt.show()
 
-
-
-
-#calling other functions
-tweets_czas = load_data("/content/drive/MyDrive/Colab Notebooks/twitter/Debata_czerwiec - Lista wyników od 16.06.2020 do 17.06.2020.xlsx", indx=False)
-
-cln_tweets_czas = clean_text(tweets_czas, 'Tekst wzmianki')
-
-with timer():
-  cln_tweets_czas = drop_empty_content(cln_tweets_czas, content_column = 'clean_Tekst wzmianki')
-
-cln_tweets_czas = drop_duplicates(cln_tweets_czas, content_column = 'clean_Tekst wzmianki')
-
-with timer():
-  cln_tweets_czas = lemmatization(cln_tweets_czas, "clean_Tekst wzmianki")
-
-with timer():
-  cln_tweets_czas = find_emotive_words(cln_tweets_czas, content_lemmatized_column = "clean_Tekst wzmianki_lemmatized",
-                                           affective_database_path = "/content/drive/MyDrive/Colab Notebooks/Emotional word lists/joined_scaled_NAWL-Sentimenti_db.xlsx",
-                                           db_words = "Word")
-
-cln_tweets_czas = average_joined_lexicons(cln_tweets_czas, emotive_words_column = "Emotive_words",
-                                                affective_database_path = "/content/drive/MyDrive/Colab Notebooks/Emotional word lists/joined_scaled_NAWL-Sentimenti_db.xlsx",
-                                                db_words = "Word")
-
-
-# with dedicated database for categories
-cln_tweets_czas = emotion_category(dataframe = cln_tweets_czas, emotive_words_column = "Emotive_words",
-                                 affective_database_path = "/content/drive/MyDrive/Colab Notebooks/Emotional word lists/emotion_6-categories_NAWL_Sentimenti_db.xlsx")
-
-cln_tweets_czas = count_categories(cln_tweets_czas, emotion_categories_column = "Emotion_categories", 
-                           affective_database_path = "/content/drive/MyDrive/Colab Notebooks/Emotional word lists/emotion_6-categories_NAWL_Sentimenti_db.xlsx", 
-                           db_emotion_category = "Class")
-
-
-data_selected_time, baseline_value = resample_and_compute_baseline(input_dataframe = cln_tweets_czas, date_col = 'Data opublikowania wzmianki',
-                                                                     time_from = '2019-10-01 20:00:00', time_to = '2019-10-01 22:00:00', time_unit = "30 sec")
-
-
-data_selected_time = two_difference_from_baseline(data_selected_time, baseline = baseline_value)

@@ -624,7 +624,7 @@ def get_valence_values(dataframe, content_lemmatized_column, affective_database_
 
   affective_database_valence = affective_database[used_cols]
   affective_database_valence.set_index(db_words, inplace=True)
-  valence_mean = affective_database_valence["Valence"].mean()
+  #valence_mean = affective_database_valence["Valence"].mean()
   affective_database_valence_words = affective_database[db_words].tolist()
 
   neg_valence_scores = []
@@ -638,10 +638,10 @@ def get_valence_values(dataframe, content_lemmatized_column, affective_database_
 
     if len(emotive_words) > 0:
       scores = affective_database_valence.loc[emotive_words]
-      neg_score = abs(np.sum(scores.where(scores["Valence"] < valence_mean))[0])
+      neg_score = abs(np.sum(scores.where(scores["Valence"] < 0.5))[0])
       neg_score = (neg_score / len(emotive_words))
       neg_valence_scores.append(neg_score)
-      pos_score = np.sum(scores.where(scores["Valence"] > valence_mean))[0]
+      pos_score = np.sum(scores.where(scores["Valence"] > 0.5))[0]
       pos_score = (pos_score / len(emotive_words))
       pos_valence_scores.append(pos_score)
     else:
@@ -649,8 +649,8 @@ def get_valence_values(dataframe, content_lemmatized_column, affective_database_
       neg_valence_scores.append(neg_score)
       pos_valence_scores.append(pos_score)
 
-  dataframe["Valence_mean_negative"] = neg_valence_scores
-  dataframe["Valence_mean_positive"] = pos_valence_scores
+  dataframe["Valence_negative"] = neg_valence_scores
+  dataframe["Valence_positive"] = pos_valence_scores
   return dataframe
 
 

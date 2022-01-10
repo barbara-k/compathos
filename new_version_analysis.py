@@ -556,7 +556,7 @@ def get_polarity_score(dataframe, content_lemmatized_column, affective_database_
       scores = affective_database_polarity.loc[emotive_words]
 
       polarity_score = (scores.sum()[0])
-      polarity_score = polarity_score / len(scores)
+      #polarity_score = polarity_score / len(scores)
       all_polarity_scores.append(polarity_score)
 
       neg_scores_count = scores.where(scores["Polarity"] < 0).count()[0]
@@ -567,11 +567,11 @@ def get_polarity_score(dataframe, content_lemmatized_column, affective_database_
 
       #absolute value easier to plot in one figure later with positive score
       neg_score = abs(np.sum(scores.where(scores["Polarity"] < 0))[0])
-      neg_score = neg_score / len(scores.where(scores["Polarity"] < 0))
+      #neg_score = neg_score / len(scores.where(scores["Polarity"] < 0))
       all_neg_scores.append(neg_score)
 
       pos_score = np.sum(scores.where(scores["Polarity"] > 0))[0]
-      pos_score = pos_score / len(scores.where(scores["Polarity"] > 0))
+      #pos_score = pos_score / len(scores.where(scores["Polarity"] > 0))
       all_pos_scores.append(pos_score)
 
       neg_percent = round((neg_scores_count / len(lemmas_list)), 3)

@@ -487,7 +487,7 @@ def count_categories(dataframe, emotion_categories_column, affective_database_pa
   return dataframe
 
 
-def plot_emotion_changes(dataframe, time_column = "Date", plot_title = "Emotions changes", ticks_unit = 7, axis_grid = "x"):
+def plot_emotion_changes(dataframe, time_column = "Date", plot_title = "Emotions changes", ticks_unit = 7):
   '''
   Plot all emotions in 1 figure
   '''
@@ -508,7 +508,6 @@ def plot_emotion_changes(dataframe, time_column = "Date", plot_title = "Emotions
   ax1.set_title(plot_title+"\n\n", fontsize=17)
   ax1.set_xlabel("\n"+"Date", fontsize=15)
   ax1.set_ylabel("Value", fontsize=15)
-  ax1.grid(axis=axis_grid)
   #plt.tight_layout()
   # new legend position
   plt.legend(loc="upper center", bbox_to_anchor=(0.5, 1.075), ncol=7)
@@ -545,15 +544,19 @@ def get_polarity_score(dataframe, content_lemmatized_column, affective_database_
   all_neg_percent = []
   all_pos_percent = []
 
-  # we take unique words bc of time (12 minutes for size of 50k, rlly long) and it reduces the "positivity noise (dominance)" a little
-  for lemmas_list in dataframe[content_lemmatized_column]:
-    lemmas_set = set(lemmas_list)
-    emotive_words = [word for word in lemmas_set.intersection(affective_database[db_words])]
+  affective_database_polarity_words = affective_database[db_words].tolist()
 
+  for lemmas_list in dataframe[content_lemmatized_column]:
+    emotive_words = []
+    for word in lemmas_list:
+      if word in affective_database_polarity_words:
+        emotive_words.append(word)
+    
     if len(emotive_words) > 0:
       scores = affective_database_polarity.loc[emotive_words]
 
       polarity_score = (scores.sum()[0])
+      polarity_score = polarity_score / len(scores)
       all_polarity_scores.append(polarity_score)
 
       neg_scores_count = scores.where(scores["Polarity"] < 0).count()[0]
@@ -562,17 +565,19 @@ def get_polarity_score(dataframe, content_lemmatized_column, affective_database_
       pos_scores_count = scores.where(scores["Polarity"] > 0).count()[0]
       all_pos_scores_counts.append(pos_scores_count)
 
-      #absolute value easier to plot in one figure later with positive scores
+      #absolute value easier to plot in one figure later with positive score
       neg_score = abs(np.sum(scores.where(scores["Polarity"] < 0))[0])
+      neg_score = neg_score / len(scores.where(scores["Polarity"] < 0))
       all_neg_scores.append(neg_score)
 
       pos_score = np.sum(scores.where(scores["Polarity"] > 0))[0]
+      pos_score = pos_score / len(scores.where(scores["Polarity"] > 0))
       all_pos_scores.append(pos_score)
 
-      neg_percent = round((neg_scores_count / len(lemmas_set)), 3)
+      neg_percent = round((neg_scores_count / len(lemmas_list)), 3)
       all_neg_percent.append(neg_percent)
 
-      pos_percent = round((pos_scores_count / len(lemmas_set)), 3)
+      pos_percent = round((pos_scores_count / len(lemmas_list)), 3)
       all_pos_percent.append(pos_percent)
 
     else:
@@ -613,7 +618,6 @@ def get_valence_values(dataframe, content_lemmatized_column, affective_database_
   https://sentimenti.pl/wp-content/uploads/2021/05/LTC2019_Recognition_of_emotions__polarity_and_arousal_in_large_scale_multi_domain_text_reviews.pdf
   
   '''
-
   if affective_database_path.endswith(".xlsx"):
     affective_database = pd.read_excel(affective_database_path)
   elif affective_database_path.endswith(".csv"):

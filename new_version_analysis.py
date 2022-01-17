@@ -341,26 +341,13 @@ def resample_and_compute_baseline(input_dataframe, date_col, time_from, time_to,
   df = df[columns_to_analyze]
   df[date_col] = pd.to_datetime(df[date_col], dayfirst = True)
   df = df[(df[date_col] >= time_from) & (df[date_col] <= time_to)].sort_values(by = date_col)
-
+  
   df = df.rename(columns={date_col:'Time'})
   df_described = df[emotions_cols].describe()
   df_described_mean = pd.DataFrame(df_described.loc["mean"]).T
 
-  melt_data = df.melt('Time', var_name='Emotions', value_name='Values')
-  melt_data = melt_data.sort_values("Time")
-
-  data_resampled_aro = melt_data[melt_data.Emotions == "Arousal"].set_index("Time").resample(time_unit)['Values'].mean().fillna(0)
-  data_resampled_ang = melt_data[melt_data.Emotions == "Anger"].set_index("Time").resample(time_unit)['Values'].mean().fillna(0)
-  data_resampled_sad = melt_data[melt_data.Emotions == "Sadness"].set_index("Time").resample(time_unit)['Values'].mean().fillna(0)
-  data_resampled_dis = melt_data[melt_data.Emotions == "Disgust"].set_index("Time").resample(time_unit)['Values'].mean().fillna(0)
-  data_resampled_val = melt_data[melt_data.Emotions == "Valence"].set_index("Time").resample(time_unit)['Values'].mean().fillna(0)
-  data_resampled_fea = melt_data[melt_data.Emotions == "Fear"].set_index("Time").resample(time_unit)['Values'].mean().fillna(0)
-  data_resampled_hap = melt_data[melt_data.Emotions == "Happiness"].set_index("Time").resample(time_unit)['Values'].mean().fillna(0)
-  data_frames_to_concat = [data_resampled_aro, data_resampled_ang, data_resampled_sad, data_resampled_dis, data_resampled_val, data_resampled_fea, data_resampled_hap]
-
-  data_resampled_all = pd.concat(data_frames_to_concat, join='outer', axis=1).fillna(0)
-  data_resampled_all.columns = ['Arousal', 'Anger', 'Sadness', 'Disgust', 'Valence', 'Fear', 'Happiness']
-  data_resampled_all = data_resampled_all.reset_index()
+  data_resampled_all = df.set_index("Time")[['Arousal', 'Anger', 'Sadness', 'Disgust', 'Valence', 'Fear', 'Happiness']].resample(time_unit).mean().fillna(0)
+  data_resampled_all.reset_index(inplace=True)
   data_resampled_all["Date"] = data_resampled_all["Time"].dt.date
   data_resampled_all["Time"] = data_resampled_all["Time"].dt.time.apply(str)
 
@@ -486,32 +473,6 @@ def count_categories(dataframe, emotion_categories_column, affective_database_pa
       dataframe["CATEGORY_"+category] = 0
   return dataframe
 
-
-def plot_emotion_changes(dataframe, time_column = "Date", plot_title = "Emotions changes", ticks_unit = 7):
-  '''
-  Plot all emotions in 1 figure
-  '''
-  sns.set_theme(style="whitegrid")
-  plt.style.use("seaborn-talk")
-  fig, ax1 = plt.subplots(1, 1, figsize=(16, 8.5))
-  ax1.plot(dataframe[time_column], dataframe["diff_from_baseline_Fear"], c="#000000", label = "Fear")
-  ax1.plot(dataframe[time_column], dataframe["diff_from_baseline_Valence"], c="#D81313", label = "Valence")
-  ax1.plot(dataframe[time_column], dataframe["diff_from_baseline_Anger"], c="#FD7E00", label = "Anger")
-  ax1.plot(dataframe[time_column], dataframe["diff_from_baseline_Happiness"], c='#8DF903', label = "Happiness", alpha=0.8)
-  ax1.plot(dataframe[time_column], dataframe["diff_from_baseline_Sadness"], c='#010598', label = "Sadness", alpha=0.8)
-  ax1.plot(dataframe[time_column], dataframe["diff_from_baseline_Arousal"], c='#01840E', label = "Arousal")
-  ax1.plot(dataframe[time_column], dataframe["diff_from_baseline_Disgust"], c='#B800B2', label = "Disgust", alpha=0.8)
-
-  x = list(dataframe[time_column])
-  ax1.set_xticks(x[::ticks_unit])
-  ax1.set_xticklabels(x[::ticks_unit], rotation=90)
-  ax1.set_title(plot_title+"\n\n", fontsize=17)
-  ax1.set_xlabel("\n"+"Date", fontsize=15)
-  ax1.set_ylabel("Value", fontsize=15)
-  #plt.tight_layout()
-  # new legend position
-  plt.legend(loc="upper center", bbox_to_anchor=(0.5, 1.075), ncol=7)
-  plt.show()
 
 
 
@@ -642,10 +603,10 @@ def get_valence_values(dataframe, content_lemmatized_column, affective_database_
 
     if len(emotive_words) > 0:
       scores = affective_database_valence.loc[emotive_words]
-      neg_score = abs(np.sum(scores.where(scores["Valence"] < 0.5))[0])
+      neg_score = abs(np.sum(scores.where(scores["Valence"].round(1) < 0.5))[0])
       neg_score = (neg_score / len(emotive_words))
       neg_valence_scores.append(neg_score)
-      pos_score = np.sum(scores.where(scores["Valence"] > 0.5))[0]
+      pos_score = np.sum(scores.where(scores["Valence"].round(1) > 0.5))[0]
       pos_score = (pos_score / len(emotive_words))
       pos_valence_scores.append(pos_score)
     else:

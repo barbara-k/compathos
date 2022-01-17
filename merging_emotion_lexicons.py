@@ -92,11 +92,11 @@ whole_clrin = pd.read_csv("/content/drive/MyDrive/Colab Notebooks/Emotional word
 whole_clrin.dropna(subset=['stopien_nacechowania'],  inplace=True)
 
 whole_clrin["Polarity"] = ''
-whole_clrin.loc[whole_clrin.stopien_nacechowania == '- s', "Polarity"] = -2
-whole_clrin.loc[whole_clrin.stopien_nacechowania == '- m', "Polarity"] = -1
+whole_clrin.loc[whole_clrin.stopien_nacechowania == '- s', "Polarity"] = -1
+whole_clrin.loc[whole_clrin.stopien_nacechowania == '- m', "Polarity"] = -2
 whole_clrin.loc[whole_clrin.stopien_nacechowania == 'amb', "Polarity"] = 0
-whole_clrin.loc[whole_clrin.stopien_nacechowania == '+ m', "Polarity"] = 1
-whole_clrin.loc[whole_clrin.stopien_nacechowania == '+ s', "Polarity"] = 2
+whole_clrin.loc[whole_clrin.stopien_nacechowania == '+ m', "Polarity"] = 2
+whole_clrin.loc[whole_clrin.stopien_nacechowania == '+ s', "Polarity"] = 1
 
 
 whole_clrin.drop_duplicates(subset=['lemat'], keep='last', inplace=True)

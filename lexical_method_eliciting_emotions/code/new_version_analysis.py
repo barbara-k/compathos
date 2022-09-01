@@ -571,7 +571,7 @@ def get_valence_values(dataframe, content_lemmatized_column, affective_database_
   
   db_words: str - name of a column in affective database where words are listed, 
 
-  * this is the implementation of Algorithm 1 in 
+  * based on the implementation of Algorithm 1 in 
   [J. Kocoń, A. Janz, P. Miłkowski, K. M. Juszczyk, K. Klessa, M. Piasecki, M. Riegel, M. Wierzba, A. Marchewka, A. Czoska, D. Grimling, and B. Konat, 
   Recognition of emotions, valence and arousal in large-scale multi-domain text reviews,  
   In Proceedings of the 9th Language and Technology Conference. Human Language Technologies as a Challenge for Computer Science and Linguistics, 2019, p. 274–280]

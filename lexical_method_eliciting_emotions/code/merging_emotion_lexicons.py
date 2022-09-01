@@ -71,8 +71,11 @@ senti = joined_sentimenti.copy()
 senti[['Valence', 'Arousal', 'Anger', 'Disgust', 'Fear','Sadness', 'Happiness']] = scaled_val_sentimenti
 joined_nawl[['Valence', 'Arousal', 'Anger', 'Disgust', 'Fear','Sadness', 'Happiness']] = scaled_val_nawl
 
-senti["Polarity"] = pd.cut(senti["Valence"], 5, labels=[-2, -1, 0, 1, 2], ordered=False)
-joined_nawl["Polarity"] = pd.cut(joined_nawl["Valence"], 5, labels=[-2, -1, 0, 1, 2], ordered=False)
+#senti["Polarity"] = pd.cut(senti["Valence"], 5, labels=[-2, -1, 0, 1, 2], ordered=False)
+senti["Polarity"] = pd.cut(senti["Valence"], bins = [-3, -1.51, -0.51, 0.51, 1.51, 3.5], right=False, labels = [-2, -1, 0, 1, 2])
+
+#joined_nawl["Polarity"] = pd.cut(joined_nawl["Valence"], 5, labels=[-2, -1, 0, 1, 2], ordered=False)
+joined_nawl["Polarity"] = pd.cut(joined_nawl["Valence"], bins = [-3, -1.51, -0.51, 0.51, 1.51, 3.5], right=False, labels = [-2, -1, 0, 1, 2])
 
 joined_scaled_db = pd.concat([senti, joined_nawl], join='outer', axis=0).reset_index(drop=True)
 joined_scaled_db.to_excel("/content/drive/MyDrive/Colab Notebooks/Emotional word lists/joined_scaled_NAWL-Sentimenti_db.xlsx")
@@ -112,7 +115,11 @@ joined_db2 = pd.read_excel("/content/drive/MyDrive/Colab Notebooks/Emotional wor
 joined_db2 = joined_db2[['Word', 'Class', 'Database']]
 
 imbir = pd.read_excel("/content/drive/MyDrive/Colab Notebooks/Emotional word lists/imbir.XLSX", index_col=0)
-imbir["Polarity"] = pd.cut(imbir["Valence_M"], 5, labels=[-2, -1, 0, 1, 2], ordered=False)
+
+#imbir["Polarity"] = pd.cut(imbir["Valence_M"], 5, labels=[-2, -1, 0, 1, 2], ordered=False)
+imbir["Polarity"] = pd.cut(imbir["Valence_M"], bins = [0, 2.51, 4.51, 5.51, 7.51, 9.5], right=False, labels = [-2, -1, 0, 1, 2])
+
+
 imbir["Database"] = "Imbir"
 
 imbir_polar = imbir[['polish word', 'Database', 'Polarity']]
@@ -134,4 +141,32 @@ imbir_valence[['Valence']] = norm_imb_val
 joined_scaled_valence = pd.concat([joined_valence, imbir_valence], join='outer', axis=0).reset_index(drop=True)
 joined_scaled_valence.drop_duplicates(subset=['Word'], keep='first', inplace=True)
 
-joined_scaled_valence.to_excel("/content/drive/MyDrive/Colab Notebooks/Emotional word lists/valence_only10k_scaled_NAWL-Sentimenti_Imbir.xlsx")
+def standardize(data):
+  from sklearn.preprocessing import StandardScaler
+  scaler = StandardScaler()
+  df = data.copy()
+  scaled_values = scaler.fit_transform(df)
+  df["Valence_standardized"] = scaled_values
+  return df
+
+
+df_senti = joined_scaled_valence[joined_scaled_valence.Database == 'Sentimenti']
+df_NAWL = joined_scaled_valence[joined_scaled_valence.Database == 'NAWL']
+df_Imbir = joined_scaled_valence[joined_scaled_valence.Database == 'Imbir']
+
+df_senti1 = standardize(df_senti[['Valence']])
+df_NAWL1 = standardize(df_NAWL[['Valence']])
+df_Imbir1 = standardize(df_Imbir[['Valence']])
+
+df_senti = pd.merge(df_senti, df_senti1.iloc[:, 1:], left_index=True, right_index=True)
+df_NAWL = pd.merge(df_NAWL, df_NAWL1.iloc[:, 1:], left_index=True, right_index=True)
+df_Imbir = pd.merge(df_Imbir, df_Imbir1.iloc[:, 1:], left_index=True, right_index=True)
+
+df_val_all = pd.concat([df_senti, df_NAWL, df_Imbir], axis=0)
+
+
+df_val_all.to_excel("/content/drive/MyDrive/Colab Notebooks/Emotional word lists/valence_only10k_scaled_NAWL-Sentimenti_Imbir.xlsx")
+
+
+
+

@@ -220,12 +220,20 @@ import glob
 dfs = glob.glob(r"C:\Users\user1\Downloads\folder\JEK\*.xlsx")
 
 df_all = pd.DataFrame(columns = ['full_text_id', 'conversation_id', 'source', 'full_text', 'sentence',
-       'radość', 'strach', 'złość', 'smutek', 'wstręt', 'zaufanie', 'suma', 'filled'])
+       'joy', 'fear', 'anger', 'sadness', 'disgust', 'trust', 'suma', 'filled'])
 for p in dfs:
   df0 = load_data(p)
   df0 = df0.iloc[:-1]
-  if 'złosć' in df0.columns:
-    df0 = df0.rename(columns ={'złosć':'złość'})
+
+  cols_emo_renam = {
+  'radość':'joy',
+  'strach':'fear',
+  'złość':'anger',
+  'złosć':'anger',
+  'smutek':'sadness',
+  'wstręt':'disgust',
+  'zaufanie':'trust'}
+  df0 = df0.rename(columns = cols_emo_renam)
   try:
     p = int(str(p[18:-5]).replace('_', ''))
   except:
@@ -235,7 +243,7 @@ for p in dfs:
 
 df_all = df_all.reset_index()
 df_all = df_all.rename(columns={'index':'id_data'})
-
+df_all.conversation_id = df_all.conversation_id.astype('str')
 
 data1 = load_data(r"C:\Users\user1\Downloads\EthApp-main\tweets_CovidVaccine_sents2.xlsx")
 split_dict = {}
@@ -256,17 +264,18 @@ for i in range(4):
     split_dict[i+1] = dd
 
 
-cols_emo = ['radość', 'strach', 'złość', 'smutek', 'wstręt', 'zaufanie']
+cols_emo = ['joy', 'fear', 'anger', 'sadness', 'disgust', 'trust']
 cols_emo1 = ['positive', 'negative_1', 'negative_2', 'neutral']
-cols_emo2 = ['radość', 'strach', 'złość', 'smutek', 'wstręt', 'zaufanie', 'positive', 'negative_1', 'negative_2', 'neutral', 'contains_emo']
-
-df_all['positive'] = np.where( (df_all[['radość', 'zaufanie']].any(axis=1)), 1, 0)
-df_all['negative_1'] = np.where( (df_all[['strach', 'smutek', 'złość', 'wstręt']].any(axis=1)), 1, 0)
-df_all['negative_2'] = np.where( (df_all[['złość', 'wstręt']].any(axis=1)), 1, 0)
-df_all['neutral'] = np.where( ~(df_all[cols_emo].any(axis=1)), 1, 0)
-df_all['contains_emo'] = np.where( (df_all[cols_emo].any(axis=1)), 1, 0)
-
+cols_emo2 = ['joy', 'fear', 'anger', 'sadness', 'disgust', 'trust', 'positive', 'negative_1', 'negative_2', 'neutral', 'contains_emotion']
+cols_emo_bin = ['neutral', 'contains_emotion']
 df_all = df_all.fillna(0)
+
+df_all['positive'] = np.where( (df_all[['joy', 'trust']].any(axis=1)), 1, 0)
+df_all['negative_1'] = np.where( (df_all[['fear', 'sadness', 'anger', 'disgust']].any(axis=1)), 1, 0)
+df_all['negative_2'] = np.where( (df_all[['anger', 'disgust']].any(axis=1)), 1, 0)
+df_all['neutral'] = np.where( ~(df_all[cols_emo].any(axis=1)), 1, 0)
+df_all['contains_emotion'] = np.where( df_all['neutral'] == 0, 1, 0)
+
 
 # remove str chcracters
 for c in cols_emo:
@@ -281,7 +290,7 @@ s3 = split_dict[3]['id_data'].unique()
 s4 = split_dict[4]['id_data'].unique()
 
 anns_size = df_all.groupby('ann', as_index=False)['filled'].mean().round(2)
-anns_size = anns_size[ (anns_size.filled < 0.65) & (anns_size.filled > 0.10) ]['ann'].values
+anns_size = anns_size[ (anns_size.filled < 0.90) & (anns_size.filled > 0.15) ]['ann'].values
 
 
 
@@ -298,7 +307,7 @@ with st.sidebar:
         # selected
         df_all = df_all[ df_all.ann.isin(anns_size) ]
 
-    page_content = st.radio("Analytics", ('IAA results', 'Wordclouds'))
+    page_content = st.radio("Analytics", ('IAA results', 'Distribution', 'Wordclouds', 'Explore cases'))
     add_spacelines(1)
 
 
@@ -313,9 +322,10 @@ df2 = df_all[df_all.id_data.isin(s2)]
 df3 = df_all[df_all.id_data.isin(s3)]
 df4 = df_all[df_all.id_data.isin(s4)]
 
-cols_emo = ['radość', 'strach', 'złość', 'smutek', 'wstręt', 'zaufanie']
+cols_emo = ['joy', 'fear', 'anger', 'sadness', 'disgust', 'trust']
 cols_emo1 = ['positive', 'negative_1', 'negative_2', 'neutral']
-cols_emo2 = ['radość', 'strach', 'złość', 'smutek', 'wstręt', 'zaufanie', 'positive', 'negative_1', 'negative_2', 'neutral']
+cols_emo2 = ['joy', 'fear', 'anger', 'sadness', 'disgust', 'trust', 'positive', 'negative_1', 'negative_2', 'neutral']
+cols_emo_bin = ['neutral']
 
 dfs2 = {1:df1, 2:df2, 3:df3, 4:df4}
 
@@ -375,14 +385,16 @@ if page_content == 'IAA results':
         'accuracy_majority': accs_maj,
         })
 
-
     with st.container():
-        fl_res_cat = st.selectbox("Choose categories for analysis of results", ['basic emotions', 'generalised emotions', 'all categories'])
+        fl_res_cat = st.selectbox("Choose categories for analysis of results", ['basic emotions', 'generalised emotions', 'all categories', 'binary'])
 
         if fl_res_cat == 'basic emotions':
             df_fl = df_fl[df_fl.emotion.isin( cols_emo )]
         elif fl_res_cat == 'generalised emotions':
             df_fl = df_fl[df_fl.emotion.isin( cols_emo1 )]
+        elif fl_res_cat == 'binary':
+            df_fl = df_fl[df_fl.emotion == 'neutral']
+            df_fl.emotion = df_fl.emotion.map({'neutral': 'contains_emotion'})
         add_spacelines(1)
 
         col1, col2 = st.columns([3, 2])
@@ -420,22 +432,25 @@ if page_content == 'IAA results':
             st.dataframe(summary_fl)
             add_spacelines(1)
 
-        if fl_res_cat != 'basic emotions':
+        if fl_res_cat in ['generalised emotions', 'all categories']:
             with st.expander('Categories mapping'):
                 st.write('Generalised emotions')
                 cols_emo1_dict = {
-                    'positive': ['radość', 'zaufanie'],
-                    'negative_1': ['strach', 'smutek', 'złość', 'wstręt'],
-                    'negative_2': ['złość', 'wstręt']
+                    'positive': ['joy', 'trust'],
+                    'negative_1': ['fear', 'sadness', 'anger', 'disgust'],
+                    'negative_2': ['anger', 'disgust']
                     }
                 st.write(cols_emo1_dict)
 
+
 elif page_content == 'Wordclouds':
-    cols_emo2_agg = ['radość_agree', 'strach_agree', 'złość_agree', 'smutek_agree', 'wstręt_agree', 'zaufanie_agree',
-                    'positive_agree', 'negative_1_agree', 'negative_2_agree', 'neutral_agree']
-    cols_emo_agg = ['radość_agree', 'strach_agree', 'złość_agree', 'smutek_agree', 'wstręt_agree', 'zaufanie_agree']
+    cols_emo2_agg = ['joy_agree', 'fear_agree', 'anger_agree', 'sadness_agree', 'disgust_agree', 'trust_agree',
+                    'positive_agree', 'negative_1_agree', 'negative_2_agree', 'neutral_agree', 'contains_emotion_agree']
+
+    cols_emo_agg = ['joy_agree', 'fear_agree', 'anger_agree', 'sadness_agree', 'disgust_agree', 'trust_agree']
     cols_emo1_agg = ['positive_agree', 'negative_1_agree', 'negative_2_agree', 'neutral_agree']
 
+    cols_emo2 = ['joy', 'fear', 'anger', 'sadness', 'disgust', 'trust', 'positive', 'negative_1', 'negative_2', 'neutral', 'contains_emotion']
     agree_cases = df_all.groupby(['id_data'], as_index=False)[cols_emo2].mean().round(3)
     agree_cases.columns = [c+'_agree' for c in agree_cases.columns]
     agree_cases = agree_cases.rename(columns = {'id_data_agree':'id_data'})
@@ -445,9 +460,9 @@ elif page_content == 'Wordclouds':
 
     with st.expander('Categories mapping'):
         cols_emo1_dict = {
-            'positive': ['radość', 'zaufanie'],
-            'negative_1': ['strach', 'smutek', 'złość', 'wstręt'],
-            'negative_2': ['złość', 'wstręt']
+            'positive': ['joy', 'trust'],
+            'negative_1': ['fear', 'sadness', 'anger', 'disgust'],
+            'negative_2': ['anger', 'disgust']
             }
         st.write(cols_emo1_dict)
 
@@ -478,3 +493,201 @@ elif page_content == 'Wordclouds':
         add_spacelines(1)
         st.write("**Table of words**")
         st.dataframe(pd.DataFrame(keyspm, columns = ['word']))
+
+elif page_content == 'Distribution':
+    # majority voting and dist
+    cols = ['joy', 'fear', 'anger', 'sadness', 'disgust', 'trust',
+        'positive', 'negative_1', 'negative_2', 'contains_emotion', 'neutral']
+    dfs2_2 = {}
+    for k in list(dfs2.keys()):
+        dd = dfs2[k]
+        num_ann = len(dd.ann.unique())
+
+        agree_cases = dd.groupby(['id_data'], as_index=False)[cols].sum().round(3)
+        agree_cases.columns = [c+'_agree' for c in agree_cases.columns]
+        agree_cases = agree_cases.rename(columns = {'id_data_agree':'id_data'})
+        if (num_ann % 2) != 0:
+            for c in agree_cases.columns[1:]:
+                agree_cases[c] = np.where(agree_cases[c] >= np.ceil(num_ann/2), 1, 0)
+        else:
+            for c in agree_cases.columns[1:-1]:
+                agree_cases[c] = np.where(agree_cases[c] >= np.ceil(num_ann/2), 1, 0)
+            agree_cases['neutral_agree'] = np.where(agree_cases['neutral_agree'] > np.ceil(num_ann/2), 1, 0)
+        dfs2_2[k] = agree_cases
+
+    dfs2_2_merge = {}
+    for k in list(dfs2.keys()):
+      dd1 = dfs2[k]
+      dd2 = dfs2_2[k]
+      dd = dd1.merge(dd2, on = 'id_data')
+      dd = dd.drop_duplicates('id_data')
+      dfs2_2_merge[k] = dd
+
+    cols_keep = ['id_data', 'full_text_id', 'conversation_id', 'source', 'full_text',
+       'sentence', 'joy_agree', 'fear_agree', 'anger_agree',
+       'sadness_agree', 'disgust_agree', 'trust_agree', 'positive_agree',
+       'negative_1_agree', 'negative_2_agree', 'neutral_agree', 'contains_emotion_agree']
+
+    df = dfs2_2_merge[list(dfs2_2_merge.keys())[0]][cols_keep].copy()
+    for k in list(dfs2_2_merge.keys())[1:]:
+        df_1 = dfs2_2_merge[k][cols_keep].copy()
+        df = pd.concat([df, df_1], axis=0, ignore_index=True)
+
+    df.columns = [c.replace('_agree', '') for c in df.columns]
+
+    cols_emo_bin = ['neutral', 'contains_emotion']
+    cols_emo = ['joy', 'fear', 'anger', 'sadness', 'disgust', 'trust']
+    cols_emo1 = ['positive', 'negative_1', 'negative_2', 'neutral']
+
+    colors_dict = {
+    'joy' : '#01AD23', 'anger' : '#FD7E00', 'sadness' : '#010598',
+    'fear' : '#000000', 'disgust' : '#6A009B', 'positive' : '#00CF80',
+    'negative_2' : '#E80000', 'negative_1' : '#900202', 'trust' : '#FFFB07',
+    'neutral': '#626464', 'contains_emotion': '#00B9CF'}
+
+    dis_res_cat = st.selectbox("Choose categories for analysis of results", ['binary', 'generalised emotions', 'basic emotions', 'all categories'])
+    if dis_res_cat == 'basic emotions':
+        cols_dist = cols_emo
+        df_plot = (df[cols_dist].describe().round(3)*100).T.reset_index()
+        sns.set(font_scale=1.4, style='whitegrid')
+        f = sns.catplot(kind='bar', data = df_plot.sort_values(by = 'mean', ascending=False), x = 'mean', y = 'index', aspect=1.5, palette=colors_dict)
+        f.set(ylabel='', xlabel='percentage')
+        plt.show()
+        dc1, dc2, dc3 = st.columns([1,5,1])
+        with dc2:
+            st.pyplot(f)
+
+    elif dis_res_cat == 'generalised emotions':
+        cols_dist = cols_emo1
+        df_plot = (df[cols_dist].describe().round(3)*100).T.reset_index()
+        sns.set(font_scale=1.4, style='whitegrid')
+        f = sns.catplot(kind='bar', data = df_plot.sort_values(by = 'mean', ascending=False), x = 'mean', y = 'index', aspect=1.5, palette=colors_dict)
+        f.set(ylabel='', xlabel='percentage')
+        plt.show()
+        dc1, dc2, dc3 = st.columns([1,5,1])
+        with dc2:
+            st.pyplot(f)
+            add_spacelines()
+            with st.expander('Categories mapping'):
+                cols_emo1_dict = {
+                    'positive': ['joy', 'trust'],
+                    'negative_1': ['fear', 'sadness', 'anger', 'disgust'],
+                    'negative_2': ['anger', 'disgust']
+                    }
+                st.write(cols_emo1_dict)
+
+    elif dis_res_cat == 'binary':
+        cols_dist = cols_emo_bin
+        df_plot = (df[cols_dist].describe().round(3)*100).T.reset_index()
+        sns.set(font_scale=1.4, style='whitegrid')
+        f = sns.catplot(kind='bar', data = df_plot.sort_values(by = 'mean', ascending=False), x = 'mean', y = 'index', aspect=1.5, palette=colors_dict)
+        f.set(ylabel='', xlabel='percentage')
+        plt.show()
+        dc1, dc2, dc3 = st.columns([1,5,1])
+        with dc2:
+            st.pyplot(f)
+
+    else:
+        df_plot = (df[cols_emo_bin].describe().round(3)*100).T.reset_index()
+        sns.set(font_scale=1.4, style='whitegrid')
+        f1 = sns.catplot(kind='bar', data = df_plot.sort_values(by = 'mean', ascending=False), x = 'mean', y = 'index', aspect=1.5, palette=colors_dict)
+        f1.set(ylabel='', xlabel='percentage')
+        plt.show()
+
+        df_plot = (df[cols_emo1].describe().round(3)*100).T.reset_index()
+        sns.set(font_scale=1.4, style='whitegrid')
+        f2 = sns.catplot(kind='bar', data = df_plot.sort_values(by = 'mean', ascending=False), x = 'mean', y = 'index', aspect=1.5, palette=colors_dict)
+        f2.set(ylabel='', xlabel='percentage')
+        plt.show()
+
+        df_plot = (df[cols_emo].describe().round(3)*100).T.reset_index()
+        sns.set(font_scale=1.4, style='whitegrid')
+        f3 = sns.catplot(kind='bar', data = df_plot.sort_values(by = 'mean', ascending=False), x = 'mean', y = 'index', aspect=1.5, palette=colors_dict)
+        f3.set(ylabel='', xlabel='percentage')
+        plt.show()
+
+        dc1, dc2, dc3 = st.columns([1,5,1])
+        with dc2:
+            st.pyplot(f1)
+            st.pyplot(f2)
+            st.pyplot(f3)
+            add_spacelines()
+            with st.expander('Categories mapping'):
+                cols_emo1_dict = {
+                    'positive': ['joy', 'trust'],
+                    'negative_1': ['fear', 'sadness', 'anger', 'disgust'],
+                    'negative_2': ['anger', 'disgust']
+                    }
+                st.write(cols_emo1_dict)
+    add_spacelines(1)
+
+
+elif page_content == 'Explore cases':
+    cols = ['joy', 'fear', 'anger', 'sadness', 'disgust', 'trust',
+        'positive', 'negative_1', 'negative_2', 'contains_emotion', 'neutral']
+    add_spacelines(1)
+
+    case_emo = st.selectbox("Choose an emotion category", cols)
+    add_spacelines(1)
+
+    cat_iaa_ecl = ['majority voted emotion', 'majority voted NO emotion', 'disaggrement on emotion annotation']
+    case_type = st.radio('Select a category of annotators agreement', cat_iaa_ecl)
+    add_spacelines(2)
+
+    st.write("##### DataFrame")
+    # majority voting
+    dfs2_2 = {}
+    for k in list(dfs2.keys()):
+        dd = dfs2[k]
+        num_ann = len(dd.ann.unique())
+
+        agree_cases = dd.groupby(['id_data'], as_index=False)[cols].mean().round(2)
+        agree_cases.columns = [c+'_agree' for c in agree_cases.columns]
+        agree_cases = agree_cases.rename(columns = {'id_data_agree':'id_data'})
+        dfs2_2[k] = agree_cases
+
+    dfs2_2_merge = {}
+    for k in list(dfs2.keys()):
+      dd1 = dfs2[k]
+      dd2 = dfs2_2[k]
+      dd = dd1.merge(dd2, on = 'id_data')
+      dd = dd.drop_duplicates('id_data')
+      dfs2_2_merge[k] = dd
+
+    cols_keep = ['id_data', 'full_text_id', 'conversation_id', 'source', 'full_text',
+       'sentence', 'joy_agree', 'fear_agree', 'anger_agree',
+       'sadness_agree', 'disgust_agree', 'trust_agree', 'positive_agree',
+       'negative_1_agree', 'negative_2_agree', 'neutral_agree', 'contains_emotion_agree']
+
+    df = dfs2_2_merge[list(dfs2_2_merge.keys())[0]][cols_keep].copy()
+    for k in list(dfs2_2_merge.keys())[1:]:
+        df_1 = dfs2_2_merge[k][cols_keep].copy()
+        df = pd.concat([df, df_1], axis=0, ignore_index=True)
+
+    df.columns = [c.replace('_agree', '') for c in df.columns]
+    cols_keep2 = ['source', 'sentence', 'joy', 'fear', 'anger', 'sadness', 'disgust', 'trust',
+        'positive', 'negative_1', 'negative_2', 'contains_emotion', 'neutral']
+
+    if case_type == 'majority voted emotion':
+        st.write(f"There are {len(df[ df[case_emo] >= 0.6 ])} such cases. ")
+        add_spacelines(1)
+        st.dataframe(df[ df[case_emo] >= 0.6 ][cols_keep2])
+
+    elif case_type == 'majority voted NO emotion':
+        st.write(f"There are {len(df[ df[case_emo] <= 0.4 ])} such cases. ")
+        add_spacelines(1)
+        st.dataframe(df[ df[case_emo] <= 0.4 ][cols_keep2])
+
+    elif case_type == 'disaggrement on emotion annotation':
+        st.write(f"There are {len( df[ (df[case_emo] < 0.6) & (df[case_emo] > 0.4) ] )} such cases. ")
+        add_spacelines(1)
+        st.dataframe(df[ (df[case_emo] < 0.6) & (df[case_emo] > 0.4) ][cols_keep2])
+
+    with st.expander('Categories mapping'):
+        st.write('Generalised emotions')
+        cols_emo1_dict = {
+            'positive': ['joy', 'trust'],
+            'negative_1': ['fear', 'sadness', 'anger', 'disgust'],
+            'negative_2': ['anger', 'disgust']
+            }
+        st.write(cols_emo1_dict)

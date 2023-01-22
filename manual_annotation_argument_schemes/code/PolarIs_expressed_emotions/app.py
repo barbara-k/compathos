@@ -245,7 +245,7 @@ df_all = df_all.reset_index()
 df_all = df_all.rename(columns={'index':'id_data'})
 df_all.conversation_id = df_all.conversation_id.astype('str')
 
-data1 = load_data(r"C:\Users\user1\Downloads\EthApp-main\tweets_CovidVaccine_sents2.xlsx")
+data1 = load_data(r"C:\Users\user1\Downloads\folder\tweets_CovidVaccine_sents2.xlsx")
 split_dict = {}
 low = 0
 high = 910
@@ -290,8 +290,6 @@ s3 = split_dict[3]['id_data'].unique()
 s4 = split_dict[4]['id_data'].unique()
 
 anns_size = df_all.groupby('ann', as_index=False)['filled'].mean().round(2)
-anns_size = anns_size[ (anns_size.filled < 0.90) & (anns_size.filled > 0.15) ]['ann'].values
-
 
 
 
@@ -301,11 +299,18 @@ with st.sidebar:
     add_spacelines(1)
 
     contents_radio_type = st.radio("Choose data", ('All annotations', 'Selected annotations'))
-    add_spacelines(1)
-
     if contents_radio_type == 'Selected annotations':
+        emo_rate_min = st.number_input('Insert a minimum percentage of texts an individual rater could annotate with emotions.',
+                            min_value = 10, max_value = 90, step = 5, value = 15)
+        emo_rate_max = st.number_input('Insert a maximum percentage of texts an individual rater could annotate with emotions.',
+                            min_value = 10, max_value = 100, step = 5, value = 85)
+
+        emo_rate_min = emo_rate_min/100
+        emo_rate_max = emo_rate_max/100
         # selected
+        anns_size = anns_size[ (anns_size.filled < emo_rate_max) & (anns_size.filled > emo_rate_min) ]['ann'].values
         df_all = df_all[ df_all.ann.isin(anns_size) ]
+    add_spacelines(1)
 
     page_content = st.radio("Analytics", ('IAA results', 'Distribution', 'Wordclouds', 'Explore cases'))
     add_spacelines(1)
@@ -322,6 +327,10 @@ df2 = df_all[df_all.id_data.isin(s2)]
 df3 = df_all[df_all.id_data.isin(s3)]
 df4 = df_all[df_all.id_data.isin(s4)]
 
+if len(df1) == 0 or len(df2) == 0 or len(df3) == 0 or len(df4) == 0:
+    st.error("Error: You need to change the selected minimum/maximum number on the sidebar.")
+    st.stop()
+
 cols_emo = ['joy', 'fear', 'anger', 'sadness', 'disgust', 'trust']
 cols_emo1 = ['positive', 'negative_1', 'negative_2', 'neutral']
 cols_emo2 = ['joy', 'fear', 'anger', 'sadness', 'disgust', 'trust', 'positive', 'negative_1', 'negative_2', 'neutral']
@@ -330,6 +339,7 @@ cols_emo_bin = ['neutral']
 dfs2 = {1:df1, 2:df2, 3:df3, 4:df4}
 
 if page_content == 'IAA results':
+    #fl_res_method = st.selectbox("Choose a method for alternative calculation of kappa", ['all but 1 agree', 'majority + 1'])
     sampl = []
     emo = []
     fle = []
@@ -350,24 +360,33 @@ if page_content == 'IAA results':
             dim = pd.concat(list(ddict.values()), axis=1, ignore_index=True)
             agg = aggregate_raters(dim.to_numpy())[0]
 
-            num_ann = len(dd.ann.unique())
+            num_ann = dd.ann.nunique()
+            maj_num = num_ann - 1
+            min_num = 1
+
             dim['acc_iaa'] = dim.sum(axis=1)
             acc_agg_maj = round(dim[ (dim.acc_iaa > np.ceil(num_ann/2)) | (dim.acc_iaa < np.floor(num_ann/2)) ].shape[0] / dim.shape[0], 3)
             acc_agg_perf = round(dim[(dim.acc_iaa == 0) | (dim.acc_iaa == num_ann)].shape[0] / dim.shape[0], 3)
             accs_maj.append(acc_agg_maj)
             accs_perf.append(acc_agg_perf)
 
-            #if (num_ann % 2) != 0:
-              #dim['fl_adj_1'] = np.where(dim.acc_iaa >= np.ceil(num_ann/2), num_ann, 0)
-              #dim['fl_adj_0'] = np.where(dim.acc_iaa <= np.floor(num_ann/2), num_ann, 0)
-            #else:
+            #if fl_res_method == 'majority + 1':
+                # 2nd method: majority + 1
                 #dim['fl_adj_1'] = np.where(dim.acc_iaa > np.ceil(num_ann/2), num_ann, 0)
                 #dim['fl_adj_0'] = np.where(dim.acc_iaa < np.floor(num_ann/2), num_ann, 0)
-            dim['fl_adj_1'] = np.where(dim.acc_iaa > np.ceil(num_ann/2), num_ann, 0)
-            dim['fl_adj_0'] = np.where(dim.acc_iaa < np.floor(num_ann/2), num_ann, 0)
+                #dim['fl_adj_1'] = np.where(~(dim[['fl_adj_1', 'fl_adj_0']].any(axis=1)) & dim['fl_adj_1'] > np.floor(num_ann/2), np.ceil(num_ann/2), dim['fl_adj_1'])
+                #dim['fl_adj_1'] = np.where(~(dim[['fl_adj_1', 'fl_adj_0']].any(axis=1)), dim.acc_iaa, dim['fl_adj_1'])
+                #dim['fl_adj_0'] = num_ann - dim['fl_adj_1']
 
-            dim['fl_adj_1'] = np.where(~(dim[['fl_adj_1', 'fl_adj_0']].any(axis=1)), np.ceil(num_ann/2), dim['fl_adj_1'])
-            dim['fl_adj_0'] = np.where(dim['fl_adj_1'] == np.ceil(num_ann/2), np.floor(num_ann/2), dim['fl_adj_0'])
+            #else:
+            # 3rd method: all but 1 agree
+            dim['fl_adj_1'] = np.where(dim.acc_iaa >= maj_num, num_ann, 0) # 5: 4,5; 0,1; (2,3)   6: 5,6; 0,1; (2,3,4)
+            dim['fl_adj_0'] = np.where(dim.acc_iaa <= min_num, num_ann, 0)
+            dim['fl_adj_1'] = np.where(~(dim[['fl_adj_1', 'fl_adj_0']].any(axis=1)), dim.acc_iaa, dim['fl_adj_1'])
+            dim[['fl_adj_1', 'fl_adj_0']] = dim[['fl_adj_1', 'fl_adj_0']].fillna(0)
+            dim['fl_adj_0'] = num_ann - dim['fl_adj_1']
+
+
             fl_adj = fleiss_kappa(dim[['fl_adj_1', 'fl_adj_0']].to_numpy())
             fle_adj.append(round(fl_adj, 3))
 
@@ -376,9 +395,11 @@ if page_content == 'IAA results':
             emo.append(e)
             fle.append(fl)
 
+    #st.dataframe(dim)
+
     df_fl = pd.DataFrame({
         'fleiss':fle,
-        'fleiss_adjusted':fle_adj,
+        'fleiss_alt':fle_adj,
         'emotion':emo,
         'sample':sampl,
         'accuracy_perfect': accs_perf,
@@ -386,7 +407,7 @@ if page_content == 'IAA results':
         })
 
     with st.container():
-        fl_res_cat = st.selectbox("Choose categories for analysis of results", ['basic emotions', 'generalised emotions', 'all categories', 'binary'])
+        fl_res_cat = st.selectbox("Choose categories for analysis of results", ['basic emotions', 'generalised emotions', 'binary'])
 
         if fl_res_cat == 'basic emotions':
             df_fl = df_fl[df_fl.emotion.isin( cols_emo )]
@@ -399,15 +420,15 @@ if page_content == 'IAA results':
 
         col1, col2 = st.columns([3, 2])
         with col1:
-            st.subheader("Fleiss kappa")
+            st.subheader("Standard Fleiss kappa")
             col1.metric(fl_res_cat, df_fl.groupby(['sample'])['fleiss'].mean().mean().round(3))
             add_spacelines(1)
             st.subheader("Perfect accuracy")
             col1.metric(fl_res_cat, df_fl.groupby(['sample'])['accuracy_perfect'].mean().mean().round(3))
 
         with col2:
-            st.subheader("Fleiss kappa - adjusted")
-            col2.metric(fl_res_cat, df_fl.groupby(['sample'])['fleiss_adjusted'].mean().mean().round(3))
+            st.subheader("Alternative Fleiss kappa")
+            col2.metric(fl_res_cat, df_fl.groupby(['sample'])['fleiss_alt'].mean().mean().round(3))
             add_spacelines(1)
             st.subheader("Majority accuracy")
             col2.metric(fl_res_cat, df_fl.groupby(['sample'])['accuracy_majority'].mean().mean().round(3))
@@ -423,7 +444,7 @@ if page_content == 'IAA results':
             add_spacelines(1)
             #st.write("Kappa")
             summary_fl = df_fl.groupby(['emotion'], as_index=False)['fleiss'].agg({'fleiss_mean':'mean'}).round(3)# , 'fleiss_max':'max'
-            summary_fl_adj = df_fl.groupby(['emotion'], as_index=False)['fleiss_adjusted'].agg({'fleiss_adj_mean':'mean'}).round(3) # , 'fleiss_adj_max':'max'
+            summary_fl_adj = df_fl.groupby(['emotion'], as_index=False)['fleiss_alt'].agg({'fleiss_alt_mean':'mean'}).round(3) # , 'fleiss_adj_max':'max'
             summary_fl = summary_fl.merge(summary_fl_adj, on = 'emotion')
             summary_fl_ap = df_fl.groupby(['emotion'], as_index=False)['accuracy_perfect'].agg({'acc_perfect_mean':'mean'}).round(3) # , 'acc_perfect_max':'max'
             summary_fl_mj = df_fl.groupby(['emotion'], as_index=False)['accuracy_majority'].agg({'acc_majority_mean':'mean'}).round(3) # , 'acc_majority_max':'max'
@@ -432,15 +453,15 @@ if page_content == 'IAA results':
             st.dataframe(summary_fl)
             add_spacelines(1)
 
-        if fl_res_cat in ['generalised emotions', 'all categories']:
-            with st.expander('Categories mapping'):
-                st.write('Generalised emotions')
-                cols_emo1_dict = {
+        with st.expander('Categories mapping'):
+            add_spacelines(2)
+            st.write('Generalised emotions')
+            cols_emo1_dict = {
                     'positive': ['joy', 'trust'],
                     'negative_1': ['fear', 'sadness', 'anger', 'disgust'],
                     'negative_2': ['anger', 'disgust']
                     }
-                st.write(cols_emo1_dict)
+            st.write(cols_emo1_dict)
 
 
 elif page_content == 'Wordclouds':
@@ -459,6 +480,8 @@ elif page_content == 'Wordclouds':
     df = lemmatization(df, 'sentence')
 
     with st.expander('Categories mapping'):
+        add_spacelines(2)
+        st.write('Generalised emotions')
         cols_emo1_dict = {
             'positive': ['joy', 'trust'],
             'negative_1': ['fear', 'sadness', 'anger', 'disgust'],
@@ -479,9 +502,9 @@ elif page_content == 'Wordclouds':
     st.info(f'Selected value: **{threshold_cloud}**')
 
     if cat_wcl_iaa == 'majority voted emotion':
-        df00 = prepare_cloud_lexeme_data(df[df[wcl_cat_agg] < 0.4], df[df[wcl_cat_agg] > 0.6])
+        df00 = prepare_cloud_lexeme_data(df[df[wcl_cat_agg] < 0.6], df[df[wcl_cat_agg] > 0.6])
     elif cat_wcl_iaa == 'majority voted NO emotion':
-        df00 = prepare_cloud_lexeme_data(df[df[wcl_cat_agg] > 0.6], df[df[wcl_cat_agg] < 0.4])
+        df00 = prepare_cloud_lexeme_data(df[df[wcl_cat_agg] > 0.4], df[df[wcl_cat_agg] < 0.4])
     elif cat_wcl_iaa == 'disaggrement on emotion annotation':
         df00 = prepare_cloud_lexeme_data(df[ (df[wcl_cat_agg] > 0.6) & (df[wcl_cat_agg] < 0.4)], df[ (df[wcl_cat_agg] > 0.4) & (df[wcl_cat_agg] < 0.6)])
 
@@ -535,6 +558,9 @@ elif page_content == 'Distribution':
 
     df.columns = [c.replace('_agree', '') for c in df.columns]
 
+    # save m-voted data
+    #df.to_excel(r'C:\Users\user1\Downloads\EthApp-main\Polaris2_mv.xlsx')
+
     cols_emo_bin = ['neutral', 'contains_emotion']
     cols_emo = ['joy', 'fear', 'anger', 'sadness', 'disgust', 'trust']
     cols_emo1 = ['positive', 'negative_1', 'negative_2', 'neutral']
@@ -551,7 +577,7 @@ elif page_content == 'Distribution':
         df_plot = (df[cols_dist].describe().round(3)*100).T.reset_index()
         sns.set(font_scale=1.4, style='whitegrid')
         f = sns.catplot(kind='bar', data = df_plot.sort_values(by = 'mean', ascending=False), x = 'mean', y = 'index', aspect=1.5, palette=colors_dict)
-        f.set(ylabel='', xlabel='percentage')
+        f.set(ylabel='', xlabel='percentage', title='Basic emotions')
         plt.show()
         dc1, dc2, dc3 = st.columns([1,5,1])
         with dc2:
@@ -562,13 +588,15 @@ elif page_content == 'Distribution':
         df_plot = (df[cols_dist].describe().round(3)*100).T.reset_index()
         sns.set(font_scale=1.4, style='whitegrid')
         f = sns.catplot(kind='bar', data = df_plot.sort_values(by = 'mean', ascending=False), x = 'mean', y = 'index', aspect=1.5, palette=colors_dict)
-        f.set(ylabel='', xlabel='percentage')
+        f.set(ylabel='', xlabel='percentage', title='Generalised emotions')
         plt.show()
         dc1, dc2, dc3 = st.columns([1,5,1])
         with dc2:
             st.pyplot(f)
             add_spacelines()
             with st.expander('Categories mapping'):
+                add_spacelines(2)
+                st.write('Generalised emotions')
                 cols_emo1_dict = {
                     'positive': ['joy', 'trust'],
                     'negative_1': ['fear', 'sadness', 'anger', 'disgust'],
@@ -581,7 +609,7 @@ elif page_content == 'Distribution':
         df_plot = (df[cols_dist].describe().round(3)*100).T.reset_index()
         sns.set(font_scale=1.4, style='whitegrid')
         f = sns.catplot(kind='bar', data = df_plot.sort_values(by = 'mean', ascending=False), x = 'mean', y = 'index', aspect=1.5, palette=colors_dict)
-        f.set(ylabel='', xlabel='percentage')
+        f.set(ylabel='', xlabel='percentage', title='Binary emotion')
         plt.show()
         dc1, dc2, dc3 = st.columns([1,5,1])
         with dc2:
@@ -591,19 +619,19 @@ elif page_content == 'Distribution':
         df_plot = (df[cols_emo_bin].describe().round(3)*100).T.reset_index()
         sns.set(font_scale=1.4, style='whitegrid')
         f1 = sns.catplot(kind='bar', data = df_plot.sort_values(by = 'mean', ascending=False), x = 'mean', y = 'index', aspect=1.5, palette=colors_dict)
-        f1.set(ylabel='', xlabel='percentage')
+        f1.set(ylabel='', xlabel='percentage', title='Binary emotion')
         plt.show()
 
         df_plot = (df[cols_emo1].describe().round(3)*100).T.reset_index()
         sns.set(font_scale=1.4, style='whitegrid')
         f2 = sns.catplot(kind='bar', data = df_plot.sort_values(by = 'mean', ascending=False), x = 'mean', y = 'index', aspect=1.5, palette=colors_dict)
-        f2.set(ylabel='', xlabel='percentage')
+        f2.set(ylabel='', xlabel='percentage', title='Generalised emotions')
         plt.show()
 
         df_plot = (df[cols_emo].describe().round(3)*100).T.reset_index()
         sns.set(font_scale=1.4, style='whitegrid')
         f3 = sns.catplot(kind='bar', data = df_plot.sort_values(by = 'mean', ascending=False), x = 'mean', y = 'index', aspect=1.5, palette=colors_dict)
-        f3.set(ylabel='', xlabel='percentage')
+        f3.set(ylabel='', xlabel='percentage', title='Basic emotions')
         plt.show()
 
         dc1, dc2, dc3 = st.columns([1,5,1])
@@ -613,6 +641,8 @@ elif page_content == 'Distribution':
             st.pyplot(f3)
             add_spacelines()
             with st.expander('Categories mapping'):
+                add_spacelines(2)
+                st.write('Generalised emotions')
                 cols_emo1_dict = {
                     'positive': ['joy', 'trust'],
                     'negative_1': ['fear', 'sadness', 'anger', 'disgust'],
@@ -684,6 +714,7 @@ elif page_content == 'Explore cases':
         st.dataframe(df[ (df[case_emo] < 0.6) & (df[case_emo] > 0.4) ][cols_keep2])
 
     with st.expander('Categories mapping'):
+        add_spacelines(2)
         st.write('Generalised emotions')
         cols_emo1_dict = {
             'positive': ['joy', 'trust'],
@@ -691,3 +722,4 @@ elif page_content == 'Explore cases':
             'negative_2': ['anger', 'disgust']
             }
         st.write(cols_emo1_dict)
+

@@ -308,8 +308,18 @@ with st.sidebar:
         emo_rate_min = emo_rate_min/100
         emo_rate_max = emo_rate_max/100
         # selected
+        st_n = len(anns_size)
         anns_size = anns_size[ (anns_size.filled < emo_rate_max) & (anns_size.filled > emo_rate_min) ]['ann'].values
+        st_e = len(anns_size)
         df_all = df_all[ df_all.ann.isin(anns_size) ]
+
+        anns_size_sent = df_all.groupby('id_data').size().unique()
+        st.info(f"Number of discarded annotations: {st_n - st_e}. Number of raters per sentence: {anns_size_sent}. ")# {anns_size_sent.min()} - {anns_size_sent.max()}
+
+    else:
+        anns_size_sent = df_all.groupby('id_data').size().unique()
+        st.info(f"Number of raters per sentence: {anns_size_sent.min()} - {anns_size_sent.max()}. ")
+
     add_spacelines(1)
 
     page_content = st.radio("Analytics", ('IAA results', 'Distribution', 'Wordclouds', 'Explore cases'))
@@ -418,6 +428,44 @@ if page_content == 'IAA results':
             df_fl.emotion = df_fl.emotion.map({'neutral': 'contains_emotion'})
         add_spacelines(1)
 
+        # vector - distance metrics - cosine sim
+        from sklearn import metrics
+        dfs_d2 = {1:df1, 2:df2, 3:df3, 4:df4}
+        cols_emo = ['joy', 'fear', 'anger', 'sadness', 'disgust', 'trust']
+        emo = []
+        cos_sim = []
+        euc_sim = []
+
+        for k in dfs_d2.keys():
+          for e in cols_emo2:
+            vec_all = []
+            emo.append(e)
+
+            for a in dfs_d2[k].ann.unique():
+              vec = dfs_d2[k][dfs_d2[k].ann == a][e].values
+              vec_all.append(vec)
+
+            dist_met2 = metrics.pairwise.cosine_similarity( np.asarray(vec_all) )
+            dist_met1 = metrics.pairwise.euclidean_distances( np.asarray(vec_all) ) # manhattan_distances euclidean_distances
+            dist_met1 = 1/(dist_met1 + 1)
+
+            cos_sim.append(dist_met2.mean(axis=0).mean().round(5))
+            euc_sim.append(dist_met1.mean(axis=0).mean().round(5))
+
+        df_cos_emo = pd.DataFrame({'emotion':emo, 'cosine_similarity': cos_sim, 'euclidean_similarity':euc_sim})
+
+        if fl_res_cat == 'basic emotions':
+            df_cos_emo = df_cos_emo[df_cos_emo.emotion.isin( cols_emo )]
+        elif fl_res_cat == 'generalised emotions':
+            df_cos_emo = df_cos_emo[df_cos_emo.emotion.isin( cols_emo1 )]
+        elif fl_res_cat == 'binary':
+            df_cos_emo = df_cos_emo[df_cos_emo.emotion == 'neutral']
+            df_cos_emo.emotion = df_cos_emo.emotion.map({'neutral': 'contains_emotion'})
+
+        df_cos_emo_avg = df_cos_emo.groupby('emotion', as_index=False).mean().round(3)
+        #st.dataframe(df_cos_emo_avg)
+        dist_sim = pd.DataFrame(df_cos_emo.mean().round(3), columns= ['score'])
+
         col1, col2 = st.columns([3, 2])
         with col1:
             st.subheader("Standard Fleiss kappa")
@@ -425,6 +473,8 @@ if page_content == 'IAA results':
             add_spacelines(1)
             st.subheader("Perfect accuracy")
             col1.metric(fl_res_cat, df_fl.groupby(['sample'])['accuracy_perfect'].mean().mean().round(3))
+            st.subheader("Euclidean Similarity")
+            col1.metric(fl_res_cat, dist_sim.loc['euclidean_similarity'].iloc[0])
 
         with col2:
             st.subheader("Alternative Fleiss kappa")
@@ -432,7 +482,8 @@ if page_content == 'IAA results':
             add_spacelines(1)
             st.subheader("Majority accuracy")
             col2.metric(fl_res_cat, df_fl.groupby(['sample'])['accuracy_majority'].mean().mean().round(3))
-
+            st.subheader("Cosine Similarity")
+            col2.metric(fl_res_cat, dist_sim.loc['cosine_similarity'].iloc[0])
             #st.write("Perfect accuracy")
             #st.dataframe(df_fl.groupby(['emotion'], as_index=False)['accuracy_perfect'].agg({'acc_perfect_mean':'mean', 'acc_perfect_max':'max'}).round(3))
             #add_spacelines(1)
@@ -450,6 +501,7 @@ if page_content == 'IAA results':
             summary_fl_mj = df_fl.groupby(['emotion'], as_index=False)['accuracy_majority'].agg({'acc_majority_mean':'mean'}).round(3) # , 'acc_majority_max':'max'
             summary_fl = summary_fl.merge(summary_fl_ap, on = 'emotion')
             summary_fl = summary_fl.merge(summary_fl_mj, on = 'emotion')
+            summary_fl = summary_fl.merge(df_cos_emo_avg, on = 'emotion')
             st.dataframe(summary_fl)
             add_spacelines(1)
 
@@ -519,8 +571,8 @@ elif page_content == 'Wordclouds':
 
 elif page_content == 'Distribution':
     # majority voting and dist
-    cols = ['joy', 'fear', 'anger', 'sadness', 'disgust', 'trust',
-        'positive', 'negative_1', 'negative_2', 'contains_emotion', 'neutral']
+    cols = ['joy', 'fear', 'anger', 'sadness', 'disgust', 'trust']
+
     dfs2_2 = {}
     for k in list(dfs2.keys()):
         dd = dfs2[k]
@@ -529,13 +581,8 @@ elif page_content == 'Distribution':
         agree_cases = dd.groupby(['id_data'], as_index=False)[cols].sum().round(3)
         agree_cases.columns = [c+'_agree' for c in agree_cases.columns]
         agree_cases = agree_cases.rename(columns = {'id_data_agree':'id_data'})
-        if (num_ann % 2) != 0:
-            for c in agree_cases.columns[1:]:
-                agree_cases[c] = np.where(agree_cases[c] >= np.ceil(num_ann/2), 1, 0)
-        else:
-            for c in agree_cases.columns[1:-1]:
-                agree_cases[c] = np.where(agree_cases[c] >= np.ceil(num_ann/2), 1, 0)
-            agree_cases['neutral_agree'] = np.where(agree_cases['neutral_agree'] > np.ceil(num_ann/2), 1, 0)
+        for c in agree_cases.columns[1:]:
+            agree_cases[c] = np.where(agree_cases[c] >= np.ceil(num_ann/2), 1, 0)
         dfs2_2[k] = agree_cases
 
     dfs2_2_merge = {}
@@ -548,18 +595,26 @@ elif page_content == 'Distribution':
 
     cols_keep = ['id_data', 'full_text_id', 'conversation_id', 'source', 'full_text',
        'sentence', 'joy_agree', 'fear_agree', 'anger_agree',
-       'sadness_agree', 'disgust_agree', 'trust_agree', 'positive_agree',
-       'negative_1_agree', 'negative_2_agree', 'neutral_agree', 'contains_emotion_agree']
+       'sadness_agree', 'disgust_agree', 'trust_agree']
 
-    df = dfs2_2_merge[list(dfs2_2_merge.keys())[0]][cols_keep].copy()
+    df = dfs2_2_merge[ list(dfs2_2_merge.keys())[0] ][cols_keep].copy()
     for k in list(dfs2_2_merge.keys())[1:]:
         df_1 = dfs2_2_merge[k][cols_keep].copy()
         df = pd.concat([df, df_1], axis=0, ignore_index=True)
 
     df.columns = [c.replace('_agree', '') for c in df.columns]
+    cols_emo = ['joy', 'fear', 'anger', 'sadness', 'disgust', 'trust']
 
-    # save m-voted data
-    #df.to_excel(r'C:\Users\user1\Downloads\EthApp-main\Polaris2_mv.xlsx')
+    df['positive'] = np.where( (df[['joy', 'trust']].any(axis=1)), 1, 0)
+    df['negative_1'] = np.where( (df[['fear', 'sadness', 'anger', 'disgust']].any(axis=1)), 1, 0)
+    df['negative_2'] = np.where( (df[['anger', 'disgust']].any(axis=1)), 1, 0)
+    df['neutral'] = np.where( (df[cols_emo].any(axis=1)), 0, 1)
+    df['contains_emotion'] = np.where( df[cols_emo].any(axis=1), 1, 0)
+
+    #st.dataframe(df[ ~(df[['positive', 'negative_1', 'neutral']].any(axis=1)) ])
+
+    # save majority-voted alike data
+    #df.to_excel(r'C:\Users\user1\Downloads\folder\Polaris2_mv.xlsx')
 
     cols_emo_bin = ['neutral', 'contains_emotion']
     cols_emo = ['joy', 'fear', 'anger', 'sadness', 'disgust', 'trust']
